@@ -1,0 +1,19 @@
+{
+  "name": "FairShare",
+  "short_name": "FairShare",
+  "description": "Split expenses with friends: peer-to-peer, no servers, your data stays yours.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#22c55e",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "utilities"]
+}
