@@ -6,13 +6,13 @@ import { Dialog, DialogHeader, DialogTitle, DialogDescription } from '@/componen
 import { useIdentityStore } from '@/stores/identity.store';
 import { MIN_PASSPHRASE_LENGTH } from '@/lib/crypto/key-encryption';
 import { estimatePassphraseStrength } from '@/lib/crypto/passphrase-strength';
+import { Capacitor } from '@capacitor/core';
 
-// key-encryption toggle plus its passphrase dialog, pulled out of Settings which
-// had six dialog flows in one component. Shown on native too - there's no keystore
-// code behind a native toggle.
 export function KeyEncryptionCard() {
   // see identity.store.ts for why this reads the store instead of a local flag.
   const keyEncryptionEnabled = useIdentityStore(s => s.isEncryptedOnDisk);
+  const nativeProtected = useIdentityStore(s => s.isNativeProtectedOnDisk);
+  const native = Capacitor.isNativePlatform();
   const { enableEncryption, disableEncryption } = useIdentityStore.getState();
   const [open, setOpen] = useState(false);
   const [passphrase, setPassphrase] = useState('');
@@ -46,45 +46,65 @@ export function KeyEncryptionCard() {
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center gap-2">
             <Lock className="w-4 h-4 text-muted-foreground" />
-            <h3 className="text-sm font-medium">Key Encryption</h3>
+            <h3 className="text-sm font-medium">{native ? 'Identity Protection' : 'Key Encryption'}</h3>
           </div>
           <div className="flex items-center justify-between gap-2">
             <div>
-              <p className="text-sm">Encrypt private key at rest</p>
+              <p className="text-sm">{native ? 'Private key protection' : 'Encrypt private key at rest'}</p>
               <p className="text-xs text-muted-foreground">
-                {keyEncryptionEnabled
+                {native && nativeProtected
+                  ? Capacitor.getPlatform() === 'android'
+                    ? 'Your identity key is wrapped with a nonexportable Android Keystore key. No biometric prompt is required.'
+                    : 'Your identity key is stored in iOS Keychain, available only while the device is unlocked and not synced or transferred to another device. No biometric prompt is required.'
+                  : keyEncryptionEnabled
                   ? 'Your private key is encrypted. You\'ll need your passphrase each time you open the app.'
                   : 'Your private key is stored unencrypted. Anyone with access to this app\'s storage can impersonate you.'}
               </p>
+              {native && nativeProtected && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Protection is always on. Your key is available to FairShare while running and can still be exported. Keep an identity backup for a new device or reinstall.
+                </p>
+              )}
             </div>
-            <label className="relative inline-flex items-center cursor-pointer shrink-0">
-              <input
-                type="checkbox"
-                aria-label="Encrypt private key at rest"
-                className="sr-only peer"
-                checked={keyEncryptionEnabled}
-                onChange={e => {
-                  setMode(e.target.checked ? 'enable' : 'disable');
-                  setPassphrase('');
-                  setConfirm('');
-                  setError('');
-                  setOpen(true);
-                }}
-              />
-              <div className="w-10 h-6 bg-muted rounded-full peer peer-checked:bg-primary transition-colors" />
-              <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4" />
-            </label>
+            {native ? !nativeProtected && keyEncryptionEnabled && (
+              <Button variant="outline" onClick={() => {
+                setMode('disable');
+                setPassphrase('');
+                setError('');
+                setOpen(true);
+              }}>Use device protection</Button>
+            ) : (
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  aria-label="Encrypt private key at rest"
+                  className="sr-only peer"
+                  checked={keyEncryptionEnabled}
+                  onChange={e => {
+                    setMode(e.target.checked ? 'enable' : 'disable');
+                    setPassphrase('');
+                    setConfirm('');
+                    setError('');
+                    setOpen(true);
+                  }}
+                />
+                <div className="w-10 h-6 bg-muted rounded-full peer peer-checked:bg-primary transition-colors" />
+                <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4" />
+              </label>
+            )}
           </div>
         </CardContent>
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogHeader>
-          <DialogTitle>{mode === 'enable' ? 'Set Encryption Passphrase' : 'Disable Encryption'}</DialogTitle>
+          <DialogTitle>{mode === 'enable' ? 'Set Encryption Passphrase' : native ? 'Use device protection' : 'Disable Encryption'}</DialogTitle>
           <DialogDescription>
             {mode === 'enable'
               ? 'Choose a passphrase to encrypt your private key. You\'ll need it every time you open FairShare. If you forget it, you can restore from a backup file or start over with a new identity.'
-              : 'Enter your current passphrase to decrypt and store your key unencrypted.'}
+              : native
+                ? 'Enter your current passphrase to move this identity to device protection. Your passphrase will no longer be needed to open FairShare. The key will not be stored as plain text.'
+                : 'Enter your current passphrase to decrypt and store your key unencrypted.'}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -149,7 +169,7 @@ export function KeyEncryptionCard() {
               disabled={!passphrase || (mode === 'enable' && (passphrase !== confirm || passphrase.length < MIN_PASSPHRASE_LENGTH))}
               onClick={submit}
             >
-              {mode === 'enable' ? 'Encrypt' : 'Decrypt'}
+              {mode === 'enable' ? 'Encrypt' : native ? 'Use device protection' : 'Decrypt'}
             </Button>
           </div>
         </div>

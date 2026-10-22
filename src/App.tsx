@@ -58,6 +58,7 @@ import { useIdentityStore } from '@/stores/identity.store';
 import { useGroupsStore } from '@/stores/groups.store';
 import { useSyncStore } from '@/stores/sync.store';
 import { useSettingsStore } from '@/stores/settings.store';
+import type { UserIdentity } from '@/types';
 
 // only Dashboard and GroupDetail load up front, the rest (and the QR scanner they pull in) on demand
 const named = <K extends string>(load: () => Promise<Record<K, ComponentType>>, key: K) =>
@@ -111,6 +112,7 @@ function AppLoader() {
   const [forgotOpen, setForgotOpen] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const restoreFileRef = useRef<HTMLInputElement>(null);
+  const [recoveryIdentity, setRecoveryIdentity] = useState<UserIdentity | null>(null);
 
   useEffect(() => {
     // Surfaces the WebView/browser engine actually rendering the app in the P2P
@@ -286,7 +288,7 @@ function AppLoader() {
               <input
                 ref={restoreFileRef}
                 type="file"
-                accept="application/json"
+                accept={Capacitor.isNativePlatform() ? '*/*' : '.json,application/json'}
                 className="hidden"
                 onChange={e => {
                   const file = e.target.files?.[0];
@@ -327,11 +329,68 @@ function AppLoader() {
     return (
       <div className="flex flex-col items-center justify-center min-h-dvh p-6 text-center gap-4">
         <h2 className="text-lg font-semibold">Couldn't load your identity</h2>
-        <p className="text-sm text-muted-foreground max-w-sm">Nothing was changed. Try again, or restart the app.</p>
+        <p className="text-sm text-muted-foreground max-w-sm">FairShare won't create a replacement identity automatically. Unlock your device and retry, or restore an identity backup if device protection is no longer available.</p>
         <p className="text-xs font-mono bg-muted rounded p-2 break-all max-w-sm">{loadError}</p>
         <button className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm" onClick={() => setBootAttempt(n => n + 1)}>
           Retry
         </button>
+        <button className="px-4 py-2 rounded-md border text-sm" onClick={() => restoreFileRef.current?.click()}>
+          Restore identity from a backup file
+        </button>
+        <input
+          ref={restoreFileRef}
+          type="file"
+          accept={Capacitor.isNativePlatform() ? '*/*' : '.json,application/json'}
+          className="hidden"
+          onChange={async e => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (!file) return;
+            setUnlockError('');
+            setRecoveryIdentity(null);
+            try {
+              const restored = importIdentityFromJSON(await file.text());
+              if (!(await keysMatch(restored))) throw new Error('The keys in this file do not belong together.');
+              setRecoveryIdentity(restored);
+            } catch (err) {
+              setUnlockError(err instanceof Error ? err.message : 'Restore failed');
+            }
+          }}
+        />
+        {recoveryIdentity && (
+          <div className="space-y-3 max-w-sm">
+            <p className="text-sm">
+              Replace the stored identity with "{recoveryIdentity.displayName}"? The old key cannot be recovered from this backup. Your groups stay on this device.
+            </p>
+            <button className="px-4 py-2 rounded-md border text-sm" onClick={() => setRecoveryIdentity(null)}>Cancel</button>
+            <button className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm" onClick={async () => {
+              setUnlockError('');
+              try {
+                await restoreIdentity(recoveryIdentity);
+                setRecoveryIdentity(null);
+              } catch (err) {
+                setUnlockError(err instanceof Error ? err.message : 'Restore failed');
+              }
+            }}>Confirm restore</button>
+          </div>
+        )}
+        {!confirmReset ? (
+          <button className="px-4 py-2 rounded-md border border-destructive text-destructive text-sm" onClick={() => setConfirmReset(true)}>
+            Start over with a new identity
+          </button>
+        ) : (
+          <div className="space-y-3 max-w-sm">
+            <p className="text-sm text-destructive">
+              Your old identity will be deleted. Your groups stay, but other members will see you as a new person. Only continue if you have a backup or accept losing this identity.
+            </p>
+            <button className="px-4 py-2 rounded-md border text-sm" onClick={() => setConfirmReset(false)}>Cancel reset</button>
+            <button className="px-4 py-2 rounded-md bg-destructive text-destructive-foreground text-sm" onClick={() => {
+              setUnlockError('');
+              resetIdentity().catch(err => setUnlockError(err instanceof Error ? err.message : 'Reset failed'));
+            }}>Confirm reset</button>
+          </div>
+        )}
+        {unlockError && <p className="text-xs text-destructive" role="alert">{unlockError}</p>}
       </div>
     );
   }

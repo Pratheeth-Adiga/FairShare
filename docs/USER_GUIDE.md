@@ -64,6 +64,15 @@ In any group, tap **"Add"** next to the Members heading:
 
 <img src="assets/screenshots/group-detail-members.png" alt="Group with members added" width="320">
 
+### Managing Members
+
+Open **"Manage Members"** from the group to:
+- **Remove a member**: if they have expenses tied to them, you're asked to reassign those
+  expenses to another member first so no expense is left pointing at nobody
+- **Introduce a peer**: if you're connected to someone who isn't directly connected to another
+  member of the group, you can ask an already-connected peer to relay the signaling handshake
+  ("introduction") so the two of them can connect without a fresh QR exchange
+
 ---
 
 ## Core Features
@@ -74,8 +83,12 @@ In any group, tap **"Add"** next to the Members heading:
 2. Fill in:
    - **Description**: What was the expense for
    - **Amount**: Total cost
-   - **Category**: Food, transport, accommodation, etc.
-   - **Paid by**: Who paid
+   - **Date**
+   - **Paid by**: Who paid. Check **"Multiple payers"** if more than one person fronted the
+     money (e.g. two people split paying the bill before splitting it among the group) and
+     enter how much each of them paid
+   - **Categories**: Food, transport, accommodation, etc. - pick one or more; groups can also
+     define their own custom categories (see Group Settings below)
    - **Split between**: Select which members share this cost
    - **Split type**: How to divide it (see Split Types below)
 3. Tap **"Add Expense"**
@@ -90,6 +103,16 @@ In any group, tap **"Add"** next to the Members heading:
 | **Exact** | You enter the exact amount each person owes | Restaurant bills where everyone ordered differently |
 | **Percentage** | Each person pays a percentage of the total | Income-proportional splits |
 | **Shares** | Each person gets a number of shares (e.g., a couple gets 2 shares) | Families or couples sharing with singles |
+| **Weights** | Like shares, but with arbitrary decimal weights | Fine-grained proportional splits |
+
+### Expense Details, Comments & Edit History
+
+Open an expense (tap it in the group's expense list) to see the full payer/split breakdown,
+and:
+- **Comments**: leave a note on an expense for other members to see (e.g. "this included
+  Priya's drinks too"); you can delete your own comments
+- **Edit history**: every edit to an expense (amount, split, description, etc.) is recorded with
+  who changed it and when, so the group can see what changed after the fact
 
 ### Viewing Balances
 
@@ -108,13 +131,14 @@ The group page shows a **Balances** section with simplified debts:
 
 <img src="assets/screenshots/settle-up.png" alt="Settle Up screen" width="320">
 
-### Deleting a Group
+### Archiving or Deleting a Group
 
-1. Open the group
-2. Tap the **gear icon** (top right) to open Settings
-3. Scroll down and tap **"Delete Group"**
-4. Confirm the deletion
-5. The group and all its expenses are permanently removed
+Open the group and tap the **gear icon** (top right) to open Settings:
+- **Archive Group**: marks the group inactive without deleting anything - its data, balances
+  and history stay intact and it stops showing up as an active group. Useful for a trip or
+  event that's over but you still want to keep the record.
+- **Delete Group**: tap **"Delete Group"**, confirm, and the group and all its expenses are
+  permanently removed. This cannot be undone.
 
 ---
 
@@ -154,6 +178,12 @@ If devices can't connect directly (common on mobile data or corporate networks):
 
 ---
 
+## History
+
+The **History** tab lists every expense across all your groups, newest first, with a search box
+that filters by description or category. It's virtualized, so it stays fast even with a large
+number of expenses.
+
 ## Statistics
 
 The **Stats** tab shows:
@@ -177,13 +207,15 @@ The **Stats** tab shows:
 ## Settings
 
 ### Group Settings (gear icon in group)
-- **Default Currency**: Change the group's currency (USD, EUR, GBP, INR, JPY, CAD, AUD)
-- **Default Split Type**: Set whether new expenses default to equal, exact, percentage, or shares
+- **Default Currency**: Change the group's currency (USD, EUR, GBP, INR, JPY, CAD, AUD). Locked
+  once the group has expenses, since balances add up every expense in one currency.
+- **Default Split Type**: Set whether new expenses default to equal, exact, percentage, shares, or weights
 - **Simplify Debts**: When enabled, complex chains of debts are reduced to fewer direct payments
+- **Categories**: Remove categories you don't use, or add your own custom categories specific to this group
 - **Backup & Export**: Export the group as JSON (all expenses, members, and settings; can be
   re-imported here or on another device) or as CSV (expenses only, for spreadsheets). Import a
   previously exported JSON file to restore or merge a group.
-- **Delete Group**: Permanently remove the group and all its data
+- **Archive Group** / **Delete Group**: see "Archiving or Deleting a Group" above
 
 ### App Settings (Settings tab)
 - **Display Name**: Change how others see you
@@ -191,11 +223,52 @@ The **Stats** tab shows:
 - **Backing up your identity**: Your identity (display name + keypair) is what lets other
   devices recognize you across groups. Back it up so you can move to a new device or restore
   after reinstalling:
-  - **Export Identity**: downloads a JSON file (keep it private, anyone with it can act as you)
-  - **Restore Identity**: replaces your current on-device identity with one from a JSON file
+  - **Export Identity**: downloads a JSON file in a browser, or opens the share sheet in the
+    mobile app so you can save it. It contains your unencrypted private key, even with
+    device or passphrase protection enabled. Keep it private, anyone with it can act as you.
+    Android sometimes says the share sheet was closed even when an app like Files or Drive
+    saved the file, so check the file is there before you rely on it.
+  - **Restore Identity**: select your exported `fairshare-identity-....json` file. The mobile
+    picker shows all file types because Android may label JSON files as text or generic files.
+    Older identity exports may have no `.json` ending; those can still be selected in the app.
+    FairShare checks the contents and keys before restoring. In Settings, you confirm the
+    replacement and a backup of your current identity is exported first. In the mobile app the
+    phone can't tell FairShare if that backup really got saved, so after the share sheet you tick
+    **I saved the backup file outside FairShare** before **Replace identity** works. If you
+    cancelled, use **Share backup again**. If the backup file can't be made at all, the
+    replacement is blocked.
+    On a new install, finish the name setup, then open Settings to restore.
+    If locked out, use **Forgot passphrase?** → **Restore identity from a backup file** instead.
+    If device protection cannot load your key, the error screen also offers a confirmed
+    backup restore. Try unlocking the phone and tapping Retry first.
+    **Start over with a new identity** is also available there, with a separate confirmation.
+    It keeps your groups but deletes the current identity, so use a backup instead if you have one.
   - **Show QR Code** / **Scan Identity QR**: transfer an identity directly between two devices
     without a file, e.g. moving to a new phone. Both directions show a warning first since the
     QR contains your private key.
+- **Key Encryption (browser)**: Encrypt your private key at rest with a passphrase, instead of storing it
+  in plain text in local storage. Once enabled, you'll need your passphrase each time you open
+  the app; if you forget it, **Forgot passphrase?** lets you restore an identity backup or
+  start over with a new identity (you'll need to re-establish connections with peers).
+- **Identity Protection (native)**: New and restored identities use device protection by default.
+  Android wraps your identity private key with a nonexportable Android Keystore key.
+  iOS stores the retrievable identity key in Keychain, available while the device is unlocked,
+  on this device only, without iCloud sync. Neither platform requires biometrics.
+  Android access does not require a screen-unlock or biometric check for each read.
+  The identity key itself remains exportable and is held in memory while FairShare is running.
+  This protects the stored private key, not group data or exported backups.
+  - Existing unencrypted native identities move to device protection at startup. FairShare checks
+    that it can read the protected key before replacing the old storage row. A storage error
+    stops startup with a retry screen; it does not create a new identity or save a plaintext key.
+  - Existing passphrase-encrypted identities keep their passphrase, including after unlocking.
+    **Use device protection** asks for that passphrase before switching. If the switch fails,
+    the passphrase-protected copy stays in place.
+  - Importing a JSON backup or scanning an identity QR protects the key on the destination phone.
+    Browser imports keep the existing browser behavior; enable Key Encryption there if wanted.
+  - Keep an exported identity backup before reinstalling or moving phones. Native protection
+    is device-bound, so copying app storage to another phone is not an identity backup.
+    File and QR exports still contain the plain private key and keep their confirmation warnings.
+- **Theme**: Switch between System, Light, and Dark appearance.
 - **Persistent Connection**: A toggle to help FairShare keep syncing while backgrounded or the
   screen is locked.
   - **Android**: shows an ongoing notification and keeps the app connected to peers continuously

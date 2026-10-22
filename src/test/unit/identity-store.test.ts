@@ -70,6 +70,8 @@ function resetStore() {
     isLoading: true,
     isInitialized: false,
     needsPassphrase: false,
+    isEncryptedOnDisk: false,
+    isNativeProtectedOnDisk: false,
     pendingProfileUpdate: null,
     loadError: null,
   });

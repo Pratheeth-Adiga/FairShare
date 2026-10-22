@@ -12,7 +12,7 @@ import { useIdentityStore } from '@/stores/identity.store';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useState, useRef } from 'react';
 import { Shield, User, Database, Smartphone, Wifi, Download, Upload, QrCode, ScanLine, Monitor, Moon, Sun } from 'lucide-react';
-import { exportIdentityToJSON, importIdentityFromJSON, downloadTextFile } from '@/lib/io/backup';
+import { exportIdentityToJSON, importIdentityFromJSON, downloadTextFile, isShareCancel } from '@/lib/io/backup';
 import { encodeIdentityForQR, decodeIdentityFromQR } from '@/lib/crypto/identity-qr';
 import { estimateBlobSize } from '@/lib/p2p/signaling-codec';
 import type { UserIdentity } from '@/types';
@@ -22,7 +22,7 @@ import { MAX_LENGTHS } from '@/lib/utils/validation';
 
 export function SettingsPage() {
   const identity = useIdentityStore(s => s.identity);
-  const { updateProfile, restoreIdentity } = useIdentityStore.getState();
+  const { updateProfile, restoreIdentity, identityForExport } = useIdentityStore.getState();
   // see identity.store.ts for why this reads the store instead of a local flag
   const isEncryptedOnDisk = useIdentityStore(s => s.isEncryptedOnDisk);
   const { keepAliveEnabled, keepAliveError, setKeepAliveEnabled, theme, setTheme } = useSettingsStore();
@@ -37,18 +37,26 @@ export function SettingsPage() {
   // or applied.
   const [qrExportWarningOpen, setQrExportWarningOpen] = useState(false);
   const [qrExportOpen, setQrExportOpen] = useState(false);
+  const [qrIdentity, setQrIdentity] = useState<UserIdentity | null>(null);
   const [qrScanWarningOpen, setQrScanWarningOpen] = useState(false);
   const [qrScanOpen, setQrScanOpen] = useState(false);
   const [qrScanError, setQrScanError] = useState('');
   const [scannedIdentity, setScannedIdentity] = useState<UserIdentity | null>(null);
+  const [backupShared, setBackupShared] = useState<'done' | 'closed' | null>(null);
+  const [backupSaved, setBackupSaved] = useState(false);
   // passphrase-encrypted identities still export as plaintext, so ask first
   const [identityExportWarningOpen, setIdentityExportWarningOpen] = useState(false);
 
   const handleSave = async () => {
     if (!displayName.trim()) return;
-    await updateProfile({ displayName: displayName.trim() });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setIdentityError('');
+    try {
+      await updateProfile({ displayName: displayName.trim() });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setIdentityError(err instanceof Error ? err.message : 'Could not save profile.');
+    }
   };
 
   const handleExportIdentity = async () => {
@@ -64,8 +72,13 @@ export function SettingsPage() {
     if (!identity) return;
     setIdentityError('');
     try {
-      setIdentityExportMessage(await downloadTextFile(`fairshare-identity-${identity.peerId}.json`, exportIdentityToJSON(identity), 'application/json'));
+      const exported = await identityForExport();
+      setIdentityExportMessage(await downloadTextFile(`fairshare-identity-${exported.peerId}.json`, exportIdentityToJSON(exported), 'application/json'));
     } catch (err) {
+      if (isShareCancel(err)) {
+        setIdentityExportMessage("Share sheet closed. If the file didn't get saved, export again.");
+        return;
+      }
       setIdentityExportMessage('');
       setIdentityError(err instanceof Error ? `Could not export identity: ${err.message}` : 'Could not export identity.');
     }
@@ -90,14 +103,25 @@ export function SettingsPage() {
   // only build the QR (it holds the private key) while the dialog is open, and
   // don't let an over-long name crash the whole page
   const identityQR = (() => {
-    if (!identity || !qrExportOpen) return null;
+    if (!qrIdentity || !qrExportOpen) return null;
     try {
-      const blob = encodeIdentityForQR(identity);
+      const blob = encodeIdentityForQR(qrIdentity);
       return { blob, fitsQR: estimateBlobSize(blob).fitsQR };
     } catch {
       return { blob: '', fitsQR: false };
     }
   })();
+
+  const showIdentityQR = async () => {
+    setQrExportWarningOpen(false);
+    setIdentityError('');
+    try {
+      setQrIdentity(await identityForExport());
+      setQrExportOpen(true);
+    } catch (err) {
+      setIdentityError(err instanceof Error ? err.message : 'Could not retrieve identity.');
+    }
+  };
 
   const handleScanIdentityQR = async (data: string) => {
     setQrScanError('');
@@ -114,25 +138,47 @@ export function SettingsPage() {
     }
   };
 
+  const closeReplaceDialog = () => {
+    setScannedIdentity(null);
+    setBackupShared(null);
+    setBackupSaved(false);
+  };
+
+  const shareCurrentBackup = async () => {
+    if (!identity) return false;
+    setIdentityError('');
+    try {
+      await downloadTextFile(
+        `fairshare-identity-backup-${identity.peerId}.json`,
+        exportIdentityToJSON(await identityForExport()),
+        'application/json'
+      );
+      if (Capacitor.isNativePlatform()) setBackupShared('done');
+    } catch (err) {
+      if (!isShareCancel(err)) {
+        setIdentityError(err instanceof Error ? `Could not back up current identity: ${err.message}` : 'Could not back up current identity.');
+        return false;
+      }
+      setBackupShared('closed');
+    }
+    return true;
+  };
+
   const handleConfirmScannedIdentity = async () => {
     if (!scannedIdentity) return;
     // mandatory backup of the current identity before overwriting so an
     // accidental replace can be reverted. Skipped only if there's no current
     // identity to back up (fresh install).
-    if (identity) {
-      try {
-        await downloadTextFile(
-          `fairshare-identity-backup-${identity.peerId}.json`,
-          exportIdentityToJSON(identity),
-          'application/json'
-        );
-      } catch (err) {
-        setIdentityError(err instanceof Error ? `Could not back up current identity: ${err.message}` : 'Could not back up current identity.');
-        return;
-      }
+    if (identity && !backupSaved) {
+      if (!(await shareCurrentBackup()) || Capacitor.isNativePlatform()) return;
     }
-    await restoreIdentity(scannedIdentity);
-    setScannedIdentity(null);
+    try {
+      await restoreIdentity(scannedIdentity);
+      closeReplaceDialog();
+      setIdentityError('');
+    } catch (err) {
+      setIdentityError(err instanceof Error ? err.message : 'Could not restore identity.');
+    }
   };
 
   return (
@@ -212,7 +258,7 @@ export function SettingsPage() {
                 <input
                   ref={importIdentityRef}
                   type="file"
-                  accept="application/json"
+                  accept={Capacitor.isNativePlatform() ? '*/*' : '.json,application/json'}
                   className="hidden"
                   onChange={e => {
                     const file = e.target.files?.[0];
@@ -319,7 +365,7 @@ export function SettingsPage() {
               <h3 className="text-sm font-medium">Storage</h3>
             </div>
             <p className="text-xs text-muted-foreground">
-              All data is stored locally on your device using IndexedDB. No data is sent to any server.
+              Group data is stored locally using IndexedDB. Native identity keys use device protection unless still protected by an existing passphrase. No data is sent to any server.
             </p>
           </CardContent>
         </Card>
@@ -353,9 +399,9 @@ export function SettingsPage() {
         <DialogHeader>
           <DialogTitle>Export unencrypted key?</DialogTitle>
           <DialogDescription>
-            Your identity is encrypted at rest with a passphrase, but the exported file is always a plain
+            Your identity is protected on this device, but the exported file is always a plain
             private key. Anyone who gets the file can act as you in every group you're in. Keep it somewhere
-            as secure as the passphrase itself.
+            private and secure.
           </DialogDescription>
         </DialogHeader>
         <div className="flex justify-end gap-2">
@@ -378,13 +424,13 @@ export function SettingsPage() {
         </DialogHeader>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => setQrExportWarningOpen(false)}>Cancel</Button>
-          <Button onClick={() => { setQrExportWarningOpen(false); setQrExportOpen(true); }}>
+          <Button onClick={showIdentityQR}>
             I understand, show it
           </Button>
         </div>
       </Dialog>
 
-      <Dialog open={qrExportOpen} onOpenChange={setQrExportOpen}>
+      <Dialog open={qrExportOpen} onOpenChange={open => { setQrExportOpen(open); if (!open) setQrIdentity(null); }}>
         <DialogHeader>
           <DialogTitle>Scan this on your other device</DialogTitle>
           <DialogDescription>On the new device, open Settings and tap "Scan Identity QR".</DialogDescription>
@@ -400,7 +446,7 @@ export function SettingsPage() {
               or use "Export Identity" (file) instead.
             </p>
           )}
-          <Button variant="outline" onClick={() => setQrExportOpen(false)}>Done</Button>
+          <Button variant="outline" onClick={() => { setQrExportOpen(false); setQrIdentity(null); }}>Done</Button>
         </div>
       </Dialog>
 
@@ -431,7 +477,7 @@ export function SettingsPage() {
       </Dialog>
 
       {/* Second, specific confirmation once we know exactly whose identity this is. */}
-      <Dialog open={!!scannedIdentity} onOpenChange={(open) => { if (!open) setScannedIdentity(null); }}>
+      <Dialog open={!!scannedIdentity} onOpenChange={(open) => { if (!open) closeReplaceDialog(); }}>
         <DialogHeader>
           <DialogTitle>Replace your identity?</DialogTitle>
           <DialogDescription>
@@ -442,13 +488,36 @@ export function SettingsPage() {
         {identity && (
           <p className="text-xs text-warning">
             {/* same warning as above - the backup is always a plain private key */}
-            A backup of your current identity is saved first. That file holds your private key unencrypted
-            {isEncryptedOnDisk ? ', even though it is passphrase-protected on this device' : ''}, so keep it private.
+            A backup of your current identity is exported first. That file holds your private key unencrypted
+            {isEncryptedOnDisk ? ', even though it is protected on this device' : ''}, so keep it private.
           </p>
         )}
+        {backupShared && (
+          <div className="space-y-2 rounded-md border p-2">
+            <p className="text-xs text-muted-foreground">
+              {backupShared === 'closed'
+                ? "The share sheet says it was closed. Android says this even after some apps save the file, so check if the backup is there."
+                : "Your phone can't tell FairShare if the backup was actually saved."}
+              {' '}Only continue once the file is somewhere outside FairShare, like Files or Drive.
+            </p>
+            <label className="flex items-center gap-2 cursor-pointer text-xs">
+              <input
+                type="checkbox"
+                className="rounded border-input"
+                checked={backupSaved}
+                onChange={e => setBackupSaved(e.target.checked)}
+              />
+              I saved the backup file outside FairShare
+            </label>
+            <Button variant="outline" size="sm" onClick={shareCurrentBackup}>
+              Share backup again
+            </Button>
+          </div>
+        )}
+        {identityError && <p className="text-xs text-destructive" role="alert">{identityError}</p>}
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => setScannedIdentity(null)}>Cancel</Button>
-          <Button onClick={handleConfirmScannedIdentity}>Replace identity</Button>
+          <Button variant="outline" onClick={closeReplaceDialog}>Cancel</Button>
+          <Button onClick={handleConfirmScannedIdentity} disabled={!!backupShared && !backupSaved}>Replace identity</Button>
         </div>
       </Dialog>
     </div>

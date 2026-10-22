@@ -172,8 +172,14 @@ export function importIdentityFromJSON(json: string): UserIdentity {
   return result.data;
 }
 
+export function isShareCancel(err: unknown): boolean {
+  return err instanceof Error && /share cancel/i.test(err.message);
+}
+
 export async function downloadTextFile(filename: string, content: string, mimeType: string): Promise<string> {
-  filename = safeFileName(filename, 'fairshare-export');
+  const extension = filename.match(/\.(json|csv)$/i)?.[0] || '';
+  const basename = extension ? filename.slice(0, -extension.length) : filename;
+  filename = safeFileName(basename, 'fairshare-export') + extension;
   if (Capacitor.isNativePlatform()) {
     const { Directory, Encoding, Filesystem } = await import('@capacitor/filesystem');
     const file = await Filesystem.writeFile({

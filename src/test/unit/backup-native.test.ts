@@ -18,7 +18,7 @@ vi.mock('@capacitor/share', () => ({
   Share: { share },
 }));
 
-import { downloadTextFile } from '@/lib/io/backup';
+import { downloadTextFile, isShareCancel } from '@/lib/io/backup';
 
 describe('downloadTextFile on a native platform', () => {
   beforeEach(() => {
@@ -54,5 +54,40 @@ describe('downloadTextFile on a native platform', () => {
     await expect(downloadTextFile('backup.json', '{}', 'application/json'))
       .rejects.toThrow('Storage unavailable');
     expect(share).not.toHaveBeenCalled();
+    expect(isShareCancel(new Error('Storage unavailable'))).toBe(false);
   });
+
+  it('passes the share sheet cancel through as a share cancel', async () => {
+    share.mockRejectedValueOnce(new Error('Share canceled'));
+
+    const err = await downloadTextFile('backup.json', '{}', 'application/json').catch(e => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(isShareCancel(err)).toBe(true);
+    expect(writeFile).toHaveBeenCalled();
+  });
+
+  it('keeps other share errors as real failures', async () => {
+    share.mockRejectedValueOnce(new Error("Can't share while sharing is in progress"));
+
+    const err = await downloadTextFile('backup.json', '{}', 'application/json').catch(e => e);
+    expect(err.message).toBe("Can't share while sharing is in progress");
+    expect(isShareCancel(err)).toBe(false);
+  });
+
+  it.each(['fairshare-identity-', 'fairshare-identity-backup-'])(
+    'keeps .json when truncating a %s export with a full peer ID',
+    async prefix => {
+      const filename = `${prefix}peer-${'a'.repeat(64)}.json`;
+      const path = filename.slice(0, 80) + '.json';
+      writeFile.mockResolvedValueOnce({ uri: `file:///cache/${path}` });
+
+      await expect(downloadTextFile(filename, '{}', 'application/json'))
+        .resolves.toBe(`Export ready: ${path}`);
+      expect(writeFile).toHaveBeenCalledWith(expect.objectContaining({ path }));
+      expect(share).toHaveBeenCalledWith(expect.objectContaining({
+        title: path,
+        url: `file:///cache/${path}`,
+      }));
+    },
+  );
 });

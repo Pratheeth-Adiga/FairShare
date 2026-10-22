@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import Security
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -53,6 +54,76 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 class MainViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(KeepAlivePlugin())
+        bridge?.registerPluginInstance(IdentityProtectionPlugin())
+    }
+}
+
+@objc(IdentityProtectionPlugin)
+public class IdentityProtectionPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "IdentityProtectionPlugin"
+    public let jsName = "IdentityProtection"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "protect", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "retrieve", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "remove", returnType: CAPPluginReturnPromise)
+    ]
+
+    private func query(peerId: String, value: String) -> [String: Any] {
+        return [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "com.fairshare.identity",
+            kSecAttrAccount as String: peerId + ":" + value,
+            kSecAttrSynchronizable as String: false
+        ]
+    }
+
+    @objc func protect(_ call: CAPPluginCall) {
+        guard let peerId = call.getString("peerId"),
+              let privateKey = call.getString("privateKey"), !privateKey.isEmpty else {
+            call.reject("Missing identity key or peer ID.")
+            return
+        }
+        let value = UUID().uuidString
+        var attributes = query(peerId: peerId, value: value)
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        attributes[kSecValueData as String] = Data(privateKey.utf8)
+        let status = SecItemAdd(attributes as CFDictionary, nil)
+        guard status == errSecSuccess else {
+            call.reject("Could not protect the identity in iOS Keychain (\(status)).")
+            return
+        }
+        call.resolve(["value": value])
+    }
+
+    @objc func retrieve(_ call: CAPPluginCall) {
+        guard let peerId = call.getString("peerId"), let value = call.getString("value") else {
+            call.reject("Missing identity reference.")
+            return
+        }
+        var attributes = query(peerId: peerId, value: value)
+        attributes[kSecReturnData as String] = true
+        attributes[kSecMatchLimit as String] = kSecMatchLimitOne
+        var found: CFTypeRef?
+        let status = SecItemCopyMatching(attributes as CFDictionary, &found)
+        guard status == errSecSuccess, let bytes = found as? Data,
+              let privateKey = String(data: bytes, encoding: .utf8) else {
+            call.reject("Could not retrieve the identity from iOS Keychain (\(status)). Unlock the device or restore an identity backup.")
+            return
+        }
+        call.resolve(["privateKey": privateKey])
+    }
+
+    @objc func remove(_ call: CAPPluginCall) {
+        guard let peerId = call.getString("peerId"), let value = call.getString("value") else {
+            call.reject("Missing identity reference.")
+            return
+        }
+        let status = SecItemDelete(query(peerId: peerId, value: value) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            call.reject("Could not remove the identity from iOS Keychain (\(status)).")
+            return
+        }
+        call.resolve()
     }
 }
 
@@ -111,4 +182,3 @@ public class KeepAlivePlugin: CAPPlugin, CAPBridgedPlugin {
         bgTask = .invalid
     }
 }
-

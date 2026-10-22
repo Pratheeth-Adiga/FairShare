@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   exportGroupToJSON,
   importGroupFromJSON,
@@ -159,5 +159,19 @@ describe('exportIdentityToJSON / importIdentityFromJSON', () => {
 describe('downloadTextFile', () => {
   it('creates and clicks a download link in the browser', async () => {
     await expect(downloadTextFile('test.json', '{}', 'application/json')).resolves.toBe('Downloaded test.json');
+  });
+
+  it.each(['json', 'csv'])('keeps .%s on long browser export filenames', async extension => {
+    const filename = `${'a'.repeat(90)}.${extension}`;
+    let downloaded = '';
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      downloaded = this.download;
+    });
+    try {
+      await downloadTextFile(filename, '{}', extension === 'json' ? 'application/json' : 'text/csv');
+      expect(downloaded).toBe(`${'a'.repeat(80)}.${extension}`);
+    } finally {
+      click.mockRestore();
+    }
   });
 });

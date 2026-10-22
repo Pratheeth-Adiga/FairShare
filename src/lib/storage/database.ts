@@ -66,10 +66,11 @@ class FairShareDB extends Dexie {
 export const db = new FairShareDB();
 
 // Keep a single identity row even during restore/QR import flows.
-export async function saveIdentity(identity: UserIdentity): Promise<void> {
-  await db.transaction('rw', db.identity, async () => {
+export async function saveIdentity(identity: UserIdentity, clearPendingProfile = false): Promise<void> {
+  await db.transaction('rw', db.identity, db.identityMeta, async () => {
     await db.identity.clear();
     await db.identity.put(identity);
+    if (clearPendingProfile) await db.identityMeta.delete(PENDING_PROFILE_KEY);
   });
 }
 
