@@ -8,6 +8,10 @@ const STATIC_ASSETS = [
   '/index.html',
   '/manifest.json',
   '/favicon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable-512.png',
+  '/apple-touch-icon.png',
 ];
 // filled in at build time by swCacheVersionPlugin with the hashed JS/CSS
 // bundle filenames, so a genuinely-first offline load (before any fetch has ever

@@ -11,6 +11,8 @@ import { generateIdentity } from '@/lib/crypto/identity';
 import { exportIdentityToJSON, downloadTextFile } from '@/lib/io/backup';
 import type { UserIdentity } from '@/types';
 
+vi.mock('../../../package.json', () => ({ version: '9.8.7' }));
+
 vi.mock('@capacitor/app', () => ({
   App: {
     addListener: vi.fn(async () => ({ remove: vi.fn() })),
@@ -67,6 +69,11 @@ async function confirmBackupSaved() {
   fireEvent.click(saved);
   fireEvent.click(screen.getByRole('button', { name: 'Replace identity' }));
 }
+
+it('shows the version from package metadata in Settings', () => {
+  render(<MemoryRouter><SettingsPage /></MemoryRouter>);
+  expect(screen.getByText('FairShare v9.8.7')).toBeInTheDocument();
+});
 
 async function stageSettingsImport() {
   render(<MemoryRouter><SettingsPage /></MemoryRouter>);

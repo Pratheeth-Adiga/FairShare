@@ -33,7 +33,7 @@ public class KeepAliveService extends Service {
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("FairShare")
                 .setContentText("Staying connected to your groups in the background")
-                .setSmallIcon(getApplicationInfo().icon)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentIntent(contentIntent)
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)

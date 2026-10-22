@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useIdentityStore } from '@/stores/identity.store';
 import { MAX_LENGTHS } from '@/lib/utils/validation';
-import { Users, Shield, Zap } from 'lucide-react';
+import { Shield, Zap } from 'lucide-react';
 
 export function Onboarding() {
   const [step, setStep] = useState(0);
@@ -31,9 +31,7 @@ export function Onboarding() {
     return (
       <div className="flex flex-col items-center justify-center min-h-dvh p-6 text-center">
         <div className="mb-8">
-          <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-            <Users className="w-10 h-10 text-primary" />
-          </div>
+          <img src="/favicon.svg" alt="" className="w-20 h-20 rounded-2xl mx-auto mb-4" />
           <h1 className="text-3xl font-bold mb-3">FairShare</h1>
           <p className="text-muted-foreground text-lg max-w-xs">
             Split expenses with friends (no accounts, no servers, your data stays yours).

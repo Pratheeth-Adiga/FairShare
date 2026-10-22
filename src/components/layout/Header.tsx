@@ -36,6 +36,9 @@ export function Header({ title, showBack = false, rightAction, className }: Head
               <ArrowLeft className="h-5 w-5" />
             </button>
           )}
+          {title === 'FairShare' && (
+            <img src="/favicon.svg" alt="" className="h-8 w-8 rounded-lg shrink-0" />
+          )}
           <h1 className="text-lg font-semibold truncate">{title}</h1>
         </div>
         {rightAction && <div>{rightAction}</div>}

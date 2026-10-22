@@ -1,5 +1,7 @@
 # FairShare
 
+<img src="public/favicon.svg" alt="FairShare logo" width="96">
+
 A serverless, peer-to-peer expense splitting PWA. No accounts, no cloud: just direct device-to-device sync via WebRTC.
 
 Split bills with roommates, trips, or any shared costs. Every device keeps its own local copy
@@ -53,6 +55,7 @@ npm run cap:run:android    # build + run on a connected device/emulator
 
 - **[User Guide](docs/USER_GUIDE.md)**: Features, how-to, and troubleshooting for end users, grouped by feature area, with notes on Android/iOS/browser differences
 - **[Architecture & Tech Stack](docs/ARCHITECTURE.md)**: Tech stack and a high-level map of what each part of the codebase handles
+- **[Release Instructions](docs/RELEASE_INSTRUCTIONS.md)**: Versioning, web archives, and signed Android APKs
 
 ## Key Features
 

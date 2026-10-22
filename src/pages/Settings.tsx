@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { version } from '../../package.json';
 import { Header } from '@/components/layout/Header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -389,7 +390,7 @@ export function SettingsPage() {
         </Card>
 
         <div className="text-center pt-4">
-          <p className="text-xs text-muted-foreground">FairShare v1.0.0</p>
+          <p className="text-xs text-muted-foreground">FairShare v{version}</p>
           <p className="text-xs text-muted-foreground">Peer-to-peer expense splitting</p>
         </div>
       </div>
